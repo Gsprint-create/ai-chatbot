@@ -22,8 +22,8 @@ db = SQLAlchemy(app)
 # Define Chat Memory Model
 class ChatMemory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.String(255), nullable=False)  # Unique user ID
-    role = db.Column(db.String(20), nullable=False)  # 'user' or 'assistant'
+    user_id = db.Column(db.String(255), nullable=False)
+    role = db.Column(db.String(20), nullable=False)
     content = db.Column(db.Text, nullable=False)
 
 # Create the database
@@ -34,7 +34,7 @@ with app.app_context():
 def home():
     return render_template("index.html")
 
-# 📌 Filter out restricted words before sending to OpenAI
+# 📌 Function to filter restricted words before sending to OpenAI
 def is_safe_prompt(prompt):
     blocked_words = ["violence", "explicit", "illegal", "weapon", "hate", "harm", "abuse", "scam", "adult", "kill", "terror"]
     for word in blocked_words:
@@ -42,7 +42,7 @@ def is_safe_prompt(prompt):
             return False
     return True
 
-# 📌 AI Chatbot Route (With Content Filtering & Image Generation)
+# 📌 AI Chatbot Route (With Content Filtering & Error Handling)
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.json
@@ -82,7 +82,7 @@ def chat():
         return jsonify({"reply": ai_reply})
 
     except openai.OpenAIError as e:
-        return jsonify({"reply": "🚫 Sorry, OpenAI blocked this request. Try rephrasing your question."})
+        return jsonify({"reply": "🚫 OpenAI rejected this request. Try rewording your question or asking something different."})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
