@@ -1,16 +1,16 @@
 import os
 import openai
-from flask import Flask, request, jsonify, render_template
+import requests
+from flask import Flask, request, jsonify, render_template, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from dotenv import load_dotenv
+from serpapi import GoogleSearch
 
-# Load API Key
+# Load API Keys
 load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
-
-if not openai_api_key:
-    raise ValueError("🚨 ERROR: OPENAI_API_KEY is missing! Set it in .env file or Render Environment Variables.")
+serpapi_key = os.getenv("SERPAPI_KEY")  # Google Image Search API Key
 
 app = Flask(__name__, template_folder="templates")
 app.secret_key = "supersecretkey"
@@ -36,41 +36,78 @@ with app.app_context():
 def home():
     return render_template("index.html")
 
-# 📌 Detect if user wants an image
+# 📌 Detect if the user is asking for an image
 def is_image_request(message):
-    keywords = ["generate an image", "show me a picture", "draw", "illustrate", "image of"]
-    return any(keyword in message.lower() for keyword in keywords)
+    trigger_words = ["draw", "generate an image", "create an image", "show me a picture", "illustrate", "image of"]
+    return any(word in message.lower() for word in trigger_words)
 
-# 📌 AI Chatbot Route with Image Generation
+# 📌 Google Image Search (If AI fails)
+def google_image_search(query):
+    params = {
+        "q": query,
+        "tbm": "isch",
+        "api_key": serpapi_key
+    }
+    search = GoogleSearch(params)
+    results = search.get_dict()
+    if "images_results" in results:
+        return results["images_results"][0]["original"]  # Return first image URL
+    return None
+
+# 📌 AI Chatbot Route (With Image Generation & Google Search)
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.json
     user_message = data.get("message", "")
 
+    user_id = "default_user"
+
     try:
-        # If user asks for an image, use OpenAI's DALL·E API
+        # If user asks for an image, generate one with DALL·E
         if is_image_request(user_message):
-            response = openai.Image.create(
-                model="dall-e-3",
-                prompt=user_message,
-                n=1,
-                size="1024x1024",
+            try:
+                response = openai.Image.create(
+                    model="dall-e-3",
+                    prompt=user_message,
+                    n=1,
+                    size="1024x1024",
+                    api_key=openai_api_key
+                )
+                image_url = response["data"][0]["url"]
+            except Exception:
+                image_url = google_image_search(user_message)  # Use Google Search if AI fails
+
+            if image_url:
+                ai_reply = f"Here is the image you requested: <img src='{image_url}' class='generated-image'><br><a href='/download?url={image_url}'>[Download Image]</a>"
+            else:
+                ai_reply = "🚫 I couldn't generate or find an image for that request."
+
+        else:
+            # Generate normal text response with ChatGPT
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": user_message}],
                 api_key=openai_api_key
             )
-            image_url = response["data"][0]["url"]
-            return jsonify({"reply": f"Here is the image you requested: {image_url}"})
+            ai_reply = response["choices"][0]["message"]["content"]
 
-        # Otherwise, use ChatGPT for normal text responses
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": user_message}],
-            api_key=openai_api_key
-        )
-        ai_reply = response["choices"][0]["message"]["content"]
         return jsonify({"reply": ai_reply})
 
-    except openai.error.OpenAIError as e:
-        return jsonify({"reply": f"🚫 OpenAI Error: {str(e)}"})
+    except openai.OpenAIError:
+        return jsonify({"reply": "🚫 OpenAI rejected this request due to content policy restrictions."})
+
+# 📌 Image Download Route
+@app.route("/download")
+def download_image():
+    image_url = request.args.get("url")
+    response = requests.get(image_url, stream=True)
+    file_path = "static/downloaded_image.jpg"
+    
+    with open(file_path, "wb") as f:
+        for chunk in response.iter_content(1024):
+            f.write(chunk)
+    
+    return send_file(file_path, as_attachment=True)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
