@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 # Load API Keys
 load_dotenv()
-openai_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+api_key = os.getenv("OPENAI_API_KEY")
 
 app = Flask(__name__, template_folder="templates")
 app.secret_key = "supersecretkey"
@@ -42,7 +42,7 @@ def is_safe_prompt(prompt):
             return False
     return True
 
-# 📌 AI Chatbot Route (With Content Filtering & Error Handling)
+# 📌 AI Chatbot Route (With Corrected OpenAI API Format)
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.json
@@ -55,34 +55,20 @@ def chat():
         return jsonify({"reply": "🚫 Sorry, I cannot process that request due to content restrictions."})
 
     try:
-        # If user asks for an image, generate one with DALL·E
-        if "image" in user_message.lower() or "draw" in user_message.lower():
-            response = openai_client.images.generate(
-                model="dall-e-3",
-                prompt=user_message,
-                n=1,
-                size="1024x1024"
-            )
+        # OpenAI API call with corrected function
+        client = openai.OpenAI(api_key=api_key)
 
-            image_url = response.data[0].url
-            ai_reply = f"Here is the image you requested: {image_url}"
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": user_message}]
+        )
 
-        else:
-            # Generate normal text response with ChatGPT
-            response = openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "You are a helpful AI assistant."},
-                    {"role": "user", "content": user_message}
-                ]
-            )
-
-            ai_reply = response.choices[0].message.content
+        ai_reply = response.choices[0].message.content
 
         return jsonify({"reply": ai_reply})
 
     except openai.OpenAIError as e:
-        return jsonify({"reply": "🚫 OpenAI rejected this request. Try rewording your question or asking something different."})
+        return jsonify({"reply": f"🚫 OpenAI API Error: {str(e)}"})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
