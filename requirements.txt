@@ -63,6 +63,7 @@ opt_einsum==3.4.0
 optree==0.14.0
 packaging==24.1
 parso==0.8.4
+pillow==11.1.0
 platformdirs==4.2.2
 preshed==3.0.9
 prompt_toolkit==3.0.47
@@ -73,6 +74,7 @@ pydantic==2.10.6
 pydantic_core==2.27.2
 Pygments==2.18.0
 pyngrok==7.2.3
+pytesseract==0.3.13
 python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
 python-telegram-bot==21.10
